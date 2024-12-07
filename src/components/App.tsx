@@ -1,11 +1,9 @@
-"use client";
-
 import React, { useState, useEffect, useCallback } from 'react';
-import Garden from '../components/Garden';
-import ControlPanel from '../components/ControlPanel';
-import CollectionNotebook from '../components/CollectionNotebook';
-import { Pet } from '../types';
-import { generatePets } from '../utils/petGenerator';
+import Garden from './components/Garden';
+import ControlPanel from './components/ControlPanel';
+import CollectionNotebook from './components/CollectionNotebook';
+import { Pet } from './types';
+import { generatePets } from './utils/petGenerator';
 import { Howl } from 'howler';
 
 const bgMusic = new Howl({
@@ -14,7 +12,7 @@ const bgMusic = new Howl({
   volume: 0.5,
 });
 
-const Page: React.FC = () => {
+const App: React.FC = () => {
   const [pets, setPets] = useState<Pet[]>([]);
   const [isNotebookOpen, setIsNotebookOpen] = useState(false);
   const [collection, setCollection] = useState<Pet[]>([]);
@@ -92,4 +90,5 @@ const Page: React.FC = () => {
   );
 };
 
-export default Page;
+export default App;
+
