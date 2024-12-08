@@ -9,11 +9,12 @@ interface PetComponentProps {
   pet: Pet;
   onCapture: (pet: Pet) => void;
   onLeave: (id: number) => void;
+  onFetchPoints: () => Promise<void>;
 }
 
-const PetComponent: React.FC<PetComponentProps> = ({ pet, onCapture, onLeave }) => {
+const PetComponent: React.FC<PetComponentProps> = ({ pet, onCapture, onLeave, onFetchPoints }) => {
   const [isBeingPet, setIsBeingPet] = useState(false);
-  const [showHearts, setShowHearts] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(false);
   const [position] = useState({
     x: Math.random() * (window.innerWidth * 0.8),
     y: Math.random() * (window.innerHeight * 0.8)
@@ -21,12 +22,10 @@ const PetComponent: React.FC<PetComponentProps> = ({ pet, onCapture, onLeave }) 
 
   // なでなで効果
   const handlePetting = () => {
-    if (!isBeingPet) {
+    if (!isCapturing) {
       setIsBeingPet(true);
-      setShowHearts(true);
       setTimeout(() => {
         setIsBeingPet(false);
-        setShowHearts(false);
       }, 2000);
     }
   };
@@ -63,25 +62,41 @@ const PetComponent: React.FC<PetComponentProps> = ({ pet, onCapture, onLeave }) 
 
   // キャプチャ時の処理
   const handleCapture = async () => {
-    if (!isBeingPet) {
-      try {
-        // コレクションに追加
-        await fetch('/api/collections', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            petType: pet.type,
-            petColor: pet.color,
-          }),
-        });
-
-        onCapture(pet);
-        setTimeout(() => onLeave(pet.id), 800);
-      } catch (error) {
-        console.error('Failed to capture pet:', error);
+    if (isCapturing) return;
+    
+    try {
+      console.log('PetComponent: handleCapture called');
+      setIsCapturing(true);
+      
+      if (!onCapture) {
+        console.error('PetComponent: onCapture is not defined');
+        return;
       }
+
+      // 親コンポーネントのonCaptureを呼び出す
+      console.log('PetComponent: calling onCapture with pet:', pet);
+      try {
+        await onCapture(pet);
+        console.log('PetComponent: onCapture completed successfully');
+        await onFetchPoints();
+      } catch (captureError) {
+        console.error('PetComponent: onCapture failed:', captureError);
+        setIsCapturing(false);
+        return;
+      }
+
+      // アニメーション完了後にペットを削除
+      console.log('PetComponent: scheduling onLeave');
+      setTimeout(() => {
+        if (onLeave) {
+          console.log('PetComponent: calling onLeave');
+          onLeave(pet.id);
+        }
+      }, 800);
+
+    } catch (error) {
+      console.error('PetComponent: Failed to capture pet:', error);
+      setIsCapturing(false);
     }
   };
 
@@ -92,8 +107,15 @@ const PetComponent: React.FC<PetComponentProps> = ({ pet, onCapture, onLeave }) 
       animate={isBeingPet ? "happy" : "idle"}
       variants={moveVariants}
       whileHover={{ scale: 1.1 }}
-      onClick={handleCapture}
-      onMouseDown={handlePetting}
+      onClick={async (e: React.MouseEvent) => {
+        e.preventDefault();
+        console.log('PetComponent: clicked');
+        await handleCapture();
+      }}
+      onMouseDown={(e: React.MouseEvent) => {
+        e.preventDefault();
+        handlePetting();
+      }}
     >
       <div className="relative">
         {/* ペットのアイコン */}
@@ -107,21 +129,6 @@ const PetComponent: React.FC<PetComponentProps> = ({ pet, onCapture, onLeave }) 
             color={pet.color}
           />
         </div>
-
-        {/* ハートエフェクト */}
-        <AnimatePresence>
-          {showHearts && (
-            <motion.div
-              className="absolute -top-6 left-1/2"
-              initial={{ opacity: 0, y: 0 }}
-              animate={{ opacity: [0, 1, 0], y: -30 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 1.5 }}
-            >
-              <span className="text-pink-500 text-2xl">♥️</span>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
     </motion.div>
   );
