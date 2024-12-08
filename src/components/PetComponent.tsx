@@ -3,7 +3,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Pet } from '../types';
-import { Howl } from 'howler';
 import PetIcon from './PetIcon';
 
 interface PetComponentProps {
@@ -13,41 +12,18 @@ interface PetComponentProps {
 }
 
 const PetComponent: React.FC<PetComponentProps> = ({ pet, onCapture, onLeave }) => {
-  const [isHovered, setIsHovered] = useState(false);
   const [isBeingPet, setIsBeingPet] = useState(false);
   const [showHearts, setShowHearts] = useState(false);
-  const [position, setPosition] = useState({
+  const [position] = useState({
     x: Math.random() * (window.innerWidth * 0.8),
     y: Math.random() * (window.innerHeight * 0.8)
   });
-
-  // サウンドエフェクト
-  const playPetSound = () => {
-    const sounds = {
-      cat: {
-        normal: ['/sounds/meow.mp3'],
-        happy: ['/sounds/purr.mp3']
-      },
-      dog: {
-        normal: ['/sounds/woof.mp3'],
-        happy: ['/sounds/bark.mp3']
-      }
-    };
-
-    const soundSet = sounds[pet.type][isBeingPet ? 'happy' : 'normal'];
-    const sound = new Howl({
-      src: [soundSet[Math.floor(Math.random() * soundSet.length)]],
-      volume: 0.6
-    });
-    sound.play();
-  };
 
   // なでなで効果
   const handlePetting = () => {
     if (!isBeingPet) {
       setIsBeingPet(true);
       setShowHearts(true);
-      playPetSound();
       setTimeout(() => {
         setIsBeingPet(false);
         setShowHearts(false);
@@ -86,11 +62,26 @@ const PetComponent: React.FC<PetComponentProps> = ({ pet, onCapture, onLeave }) 
   };
 
   // キャプチャ時の処理
-  const handleCapture = () => {
+  const handleCapture = async () => {
     if (!isBeingPet) {
-      playPetSound();
-      onCapture(pet);
-      setTimeout(() => onLeave(pet.id), 800);
+      try {
+        // コレクションに追加
+        await fetch('/api/collections', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            petType: pet.type,
+            petColor: pet.color,
+          }),
+        });
+
+        onCapture(pet);
+        setTimeout(() => onLeave(pet.id), 800);
+      } catch (error) {
+        console.error('Failed to capture pet:', error);
+      }
     }
   };
 
@@ -101,8 +92,6 @@ const PetComponent: React.FC<PetComponentProps> = ({ pet, onCapture, onLeave }) 
       animate={isBeingPet ? "happy" : "idle"}
       variants={moveVariants}
       whileHover={{ scale: 1.1 }}
-      onHoverStart={() => setIsHovered(true)}
-      onHoverEnd={() => setIsHovered(false)}
       onClick={handleCapture}
       onMouseDown={handlePetting}
     >
@@ -118,22 +107,6 @@ const PetComponent: React.FC<PetComponentProps> = ({ pet, onCapture, onLeave }) 
             color={pet.color}
           />
         </div>
-
-        {/* 吹き出し */}
-        <AnimatePresence>
-          {isHovered && (
-            <motion.div
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white px-2 py-1 rounded-lg shadow-md"
-            >
-              <p className="text-sm whitespace-nowrap">
-                {pet.type === 'cat' ? 'にゃ〜ん♪' : 'わんわん！'}
-              </p>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         {/* ハートエフェクト */}
         <AnimatePresence>

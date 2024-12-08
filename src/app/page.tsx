@@ -1,20 +1,21 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { User } from '@supabase/supabase-js';
 import Garden from '../components/Garden';
 import ControlPanel from '../components/ControlPanel';
 import CollectionNotebook from '../components/CollectionNotebook';
+import UserPoints from '../components/UserPoints';
+import Auth from '../components/Auth';
 import { Pet } from '../types';
 import { generatePets } from '../utils/petGenerator';
-import { Howl } from 'howler';
+import { supabase } from '@/lib/supabase';
 
-const bgMusic = new Howl({
-  src: ['/sounds/gentle_nature.mp3'],
-  loop: true,
-  volume: 0.5,
-});
+const MAX_PETS = 8;
+const NEW_PET_INTERVAL = 20000;
 
 const Page: React.FC = () => {
+  const [user, setUser] = useState<User | null>(null);
   const [pets, setPets] = useState<Pet[]>([]);
   const [isNotebookOpen, setIsNotebookOpen] = useState(false);
   const [collection, setCollection] = useState<Pet[]>([]);
@@ -22,7 +23,7 @@ const Page: React.FC = () => {
 
   const initializePets = useCallback(() => {
     try {
-      const initialPets = generatePets(5);
+      const initialPets = generatePets(Math.min(5, MAX_PETS));
       setPets(initialPets);
       setIsLoading(false);
     } catch (error) {
@@ -33,10 +34,15 @@ const Page: React.FC = () => {
 
   useEffect(() => {
     initializePets();
-    bgMusic.play();
 
     const newPetInterval = setInterval(() => {
       setPets(prevPets => {
+        if (prevPets.length >= MAX_PETS) {
+          const indexToRemove = Math.floor(Math.random() * prevPets.length);
+          const newPets = [...prevPets];
+          newPets.splice(indexToRemove, 1);
+          return [...newPets, ...generatePets(1)];
+        }
         try {
           return [...prevPets, ...generatePets(1)];
         } catch (error) {
@@ -44,28 +50,69 @@ const Page: React.FC = () => {
           return prevPets;
         }
       });
-    }, 15000);
+    }, NEW_PET_INTERVAL);
 
     return () => {
-      bgMusic.stop();
       clearInterval(newPetInterval);
     };
   }, [initializePets]);
 
-  const handleCapture = useCallback((pet: Pet) => {
-    const captureSound = new Howl({
-      src: [pet.type === 'cat' ? '/sounds/meow.mp3' : '/sounds/woof.mp3'],
-      volume: 0.7,
-    });
-    captureSound.play();
+  // コレクションの取得
+  useEffect(() => {
+    const fetchCollection = async () => {
+      if (user) {
+        try {
+          const { data, error } = await supabase
+            .from('collections')
+            .select('*')
+            .eq('user_id', user.id);
 
-    setCollection((prev) => {
-      if (!prev.some((p) => p.id === pet.id)) {
-        return [...prev, pet];
+          if (error) throw error;
+          setCollection(data || []);
+        } catch (error) {
+          console.error('Failed to fetch collection:', error);
+        }
       }
-      return prev;
-    });
-  }, []);
+    };
+
+    fetchCollection();
+  }, [user]);
+
+  const handleCapture = useCallback(async (pet: Pet) => {
+    if (!user) return;
+
+    try {
+      // コレクションに追加
+      const { error: collectionError } = await supabase
+        .from('collections')
+        .insert([
+          {
+            user_id: user.id,
+            pet_type: pet.type,
+            pet_color: pet.color
+          }
+        ]);
+
+      if (collectionError) throw collectionError;
+
+      // ポイントを加算
+      const { error: pointsError } = await supabase.rpc('increment_points', {
+        user_id: user.id,
+        points_to_add: 10
+      });
+
+      if (pointsError) throw pointsError;
+
+      setCollection(prev => {
+        if (!prev.some(p => p.id === pet.id)) {
+          return [...prev, pet];
+        }
+        return prev;
+      });
+    } catch (error) {
+      console.error('Failed to capture pet:', error);
+    }
+  }, [user]);
 
   const handlePetLeave = useCallback((id: number) => {
     setPets(prevPets => prevPets.filter(pet => pet.id !== id));
@@ -74,6 +121,10 @@ const Page: React.FC = () => {
   const toggleNotebook = useCallback(() => {
     setIsNotebookOpen(prev => !prev);
   }, []);
+
+  if (!user) {
+    return <Auth onAuthChange={setUser} />;
+  }
 
   if (isLoading) {
     return (
@@ -85,6 +136,7 @@ const Page: React.FC = () => {
 
   return (
     <div className="h-screen bg-[#FFF9E5] overflow-hidden">
+      <UserPoints user={user} />
       <Garden pets={pets} onCapture={handleCapture} onLeave={handlePetLeave} />
       <ControlPanel onNotebookToggle={toggleNotebook} bgColor="#FFE4B5" textColor="#8B4513" />
       {isNotebookOpen && <CollectionNotebook collection={collection} onClose={toggleNotebook} />}
